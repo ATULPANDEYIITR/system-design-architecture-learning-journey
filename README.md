@@ -120,8 +120,6 @@ These fundamentals provide the foundation for learning APIs, databases, caching,
 
 System Design will be covered gradually, starting with basic system concepts and progressing toward architecture, APIs, databases, scalability, caching, load balancing, distributed systems, and advanced system design concepts.
 
-## Day 01 Completed
+## Day 00 Completed
 
 **Focus:** Basic System Components and Architecture
-
-**Next:** Continue with the next concepts in System Design.
