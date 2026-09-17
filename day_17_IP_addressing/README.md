@@ -1,292 +1,436 @@
 # IP addressing: IPv4, IPv6, public and private IP
 
-## Introduction
+## Topic introduction
 
-IP addressing is the addressing system used by the Internet Protocol layer to identify network-layer endpoints and determine how packets can be delivered between networks.
+IP addressing is the network-layer mechanism used to identify endpoints and networks in Internet Protocol communication. An IP address is used by networked systems and routers to determine where packets originate, where they should be delivered, and which network path should be used.
 
-The two major Internet Protocol versions are IPv4 and IPv6.
+This study covers two major versions of Internet Protocol addressing:
 
-IPv4 uses 32-bit addresses and represents them commonly as four decimal octets, such as `192.168.1.10`.
+- IPv4, which uses 32-bit addresses
+- IPv6, which uses 128-bit addresses
 
-IPv6 uses 128-bit addresses and represents them as hexadecimal groups separated by colons, such as `2001:db8:1234::10`.
+It also examines public and private addressing, CIDR notation, subnetting, route aggregation, special-purpose addresses, NAT, IPv6 address types, routing decisions, address allocation, validation, security considerations, and dual-stack application design.
 
-IP addressing involves more than memorizing address formats. A practical understanding requires knowledge of network prefixes, subnet masks, CIDR notation, host capacity, routing, private addressing, public addressing, special-purpose addresses, IPv6 address types, address allocation, and the relationship between addressing and network security.
+The three implementations approach the subject differently:
 
-The three implementations in this repository approach the subject differently:
+- Python uses the standard `ipaddress` module to provide precise address and network calculations.
+- JavaScript implements address parsing and CIDR operations explicitly, making the underlying algorithms visible.
+- C++ develops an enterprise-style case study with address classes, routing tables, allocation, access-control rules, IPv6 parsing, and automated tests.
 
-- The Python program is a broad educational implementation using the standard `ipaddress` library for reliable address calculations.
-- The JavaScript program implements important IPv4 and IPv6 operations directly, demonstrating integer manipulation, validation, `BigInt`, classes, error handling, and application-level logic.
-- The C++ program develops an industry-style network planning case study with custom IPv4 and IPv6 representations, CIDR calculations, VLSM allocation, route selection, validation, and automated tests.
+The examples use documentation addresses where an Internet-facing example is required. Documentation ranges are preferable to copying addresses belonging to real infrastructure.
 
-## Fundamental terminology
+## Fundamental concepts
 
-### IP address
+### What is an IP address?
 
-An IP address is a value used by the Internet Protocol layer to identify an address associated with an interface or endpoint.
+An IP address is a numerical address used at the network layer. It belongs to an address family and is interpreted together with a prefix or subnet configuration.
 
-An address has meaning together with a prefix or subnet context. For example, `192.168.10.25/24` indicates that the first 24 bits identify the network prefix while the remaining 8 bits belong to the host portion.
+An address can be associated with a network interface rather than being treated as a permanent identity for an entire physical device. One machine can have several interfaces and several IP addresses. A single interface can also have multiple addresses, particularly in IPv6 and dual-stack environments.
 
-An address by itself does not necessarily tell the complete network structure.
+For example, an IPv4 address can be written as:
+
+`192.168.1.25`
+
+An IPv6 address can be written as:
+
+`2001:db8:1234:5678::25`
+
+The two addresses belong to different address families.
 
 ### IPv4
 
-IPv4 is the fourth version of the Internet Protocol. Its addresses contain 32 bits.
+IPv4 uses 32 bits. It is normally represented as four decimal octets separated by periods.
 
-A common representation is dotted decimal:
+Each octet contains eight bits and can represent values from 0 through 255.
 
-`192.168.10.25`
+For example:
 
-The four decimal values are octets. Each octet contains 8 bits.
+`192.168.1.25`
 
-The theoretical IPv4 address space contains:
+can be represented in binary as four groups of eight bits.
+
+The total number of possible IPv4 bit patterns is:
 
 `2^32 = 4,294,967,296`
 
-possible 32-bit values.
-
-This number is much smaller than the number of addresses available in IPv6.
+This is the theoretical address space. It does not mean that every address is available for assignment to ordinary hosts. Various ranges have special purposes, and subnetting determines which addresses belong to particular networks.
 
 ### IPv6
 
-IPv6 uses 128-bit addresses.
+IPv6 uses 128 bits.
 
-A conventional expanded IPv6 address contains eight groups of four hexadecimal digits:
+A fully expanded address contains eight 16-bit hexadecimal groups:
 
-`2001:0db8:0000:0000:0000:0000:0000:0001`
+`2001:0db8:0000:0000:0000:ff00:0042:8329`
 
-The same address can normally be written in compressed form:
+Leading zeros within each group can be removed:
 
-`2001:db8::1`
+`2001:db8:0:0:0:ff00:42:8329`
 
-The theoretical IPv6 address space contains `2^128` possible values.
+One consecutive sequence of zero groups can be compressed using `::`:
 
-### Network prefix
+`2001:db8::ff00:42:8329`
 
-The network prefix identifies the portion of an IP address associated with a particular network or routing boundary.
+The `::` notation may appear only once in an IPv6 address because the number of omitted zero groups would otherwise be ambiguous.
 
-For example:
+The theoretical IPv6 address space contains:
 
-`192.168.10.0/24`
+`2^128`
 
-The `/24` means that 24 of the 32 IPv4 bits form the prefix.
+addresses.
 
-### Host portion
+The size of this space fundamentally changes how networks are designed. IPv6 subnet planning generally focuses on hierarchical prefixes and routing architecture rather than conserving individual host addresses.
 
-The bits remaining after the network prefix are available for host addressing.
+## Terminology
 
-For an IPv4 `/24`:
+### Address
 
-- Total bits: 32
-- Network bits: 24
-- Host bits: 8
-- Total address combinations: `2^8 = 256`
+The numerical value identifying an IP endpoint within an address family.
 
-For an ordinary LAN subnet, the network address and broadcast address are traditionally reserved, leaving 254 usable host addresses.
+### Network
+
+A collection of addresses represented by a prefix. For example, `192.168.1.0/24` describes an IPv4 network.
+
+### Prefix length
+
+The number following the slash in CIDR notation. It specifies how many leading bits belong to the network prefix.
 
 ### CIDR
 
-CIDR stands for Classless Inter-Domain Routing.
+Classless Inter-Domain Routing. CIDR represents networks with explicit prefix lengths instead of relying on the historical IPv4 class system.
 
-CIDR represents an address together with a prefix length:
+### Subnet
 
-`192.168.10.0/24`
+A smaller network created by dividing a larger network into multiple prefixes.
 
-CIDR replaced the rigid class-based allocation model that historically divided IPv4 into Classes A, B and C.
+### Host portion
 
-Modern networks can use prefixes such as `/19`, `/22`, `/27`, `/29` and `/30`, depending on addressing requirements.
+The bits remaining after the network prefix. In conventional IPv4 subnetting, these bits determine individual addresses inside the subnet.
 
-## IPv4 representation
+### Network address
 
-The Python implementation demonstrates conversion between dotted-decimal IPv4 and binary representation.
+For a conventional IPv4 subnet, the address in which all host bits are zero.
 
-For example:
+### Broadcast address
 
-`192.168.1.1`
+For a conventional IPv4 subnet, the address in which all host bits are one. IPv6 does not use IPv4-style broadcast.
 
-can be represented as:
+### Public address
 
-`11000000 10101000 00000001 00000001`
+An address intended for global Internet routing or other globally reachable addressing contexts. Whether an address is actually reachable depends on routing, filtering, NAT, firewall policy, provider configuration, and the service itself.
 
-The four octets are:
+### Private address
 
-- `192` = `11000000`
-- `168` = `10101000`
-- `1` = `00000001`
-- `1` = `00000001`
+An address from a range intended for private network use. For IPv4, the commonly recognized private ranges are the RFC 1918 ranges:
 
-The JavaScript implementation performs the same conversion using unsigned 32-bit integer operations.
+`10.0.0.0/8`
 
-This demonstrates an important implementation issue in JavaScript: ordinary bitwise operators operate on signed 32-bit integers. The unsigned right-shift operator and `>>> 0` conversion are therefore important when working with the complete IPv4 range.
+`172.16.0.0/12`
 
-The C++ implementation stores an IPv4 address in `std::uint32_t`, which directly represents the 32-bit address value.
+`192.168.0.0/16`
 
-## IPv4 subnet masks
+Private does not mean confidential or inherently secure.
 
-A subnet mask indicates which IPv4 bits belong to the network prefix.
+### NAT
 
-Common examples include:
+Network Address Translation changes address information as packets cross a translation device.
 
-| CIDR | Subnet mask |
-|---|---|
-| `/8` | `255.0.0.0` |
-| `/16` | `255.255.0.0` |
-| `/20` | `255.255.240.0` |
-| `/24` | `255.255.255.0` |
-| `/25` | `255.255.255.128` |
-| `/26` | `255.255.255.192` |
-| `/27` | `255.255.255.224` |
-| `/28` | `255.255.255.240` |
-| `/30` | `255.255.255.252` |
-| `/32` | `255.255.255.255` |
+### PAT
 
-A prefix length is generally easier to reason about than the dotted-decimal mask because it directly specifies the number of network bits.
-
-## IPv4 subnet calculation
-
-Consider:
-
-`192.168.10.25/24`
-
-The `/24` mask is:
-
-`255.255.255.0`
-
-The containing network is:
-
-`192.168.10.0/24`
-
-The broadcast address is:
-
-`192.168.10.255`
-
-The traditional usable host range is:
-
-`192.168.10.1` through `192.168.10.254`
-
-The Python program calculates these values using the standard `ipaddress.IPv4Network` implementation.
-
-The JavaScript program performs the calculation by converting the address and mask into 32-bit integers and applying a bitwise AND operation.
-
-The C++ program implements the same mechanism explicitly using `std::uint32_t`.
-
-The fundamental operation is:
-
-`network = address AND subnet-mask`
-
-The broadcast address can be obtained by setting all host bits to one.
-
-## Host capacity
-
-The number of host bits determines the number of address combinations.
-
-If `h` bits are available for hosts:
-
-`2^h`
-
-addresses are possible.
-
-For a conventional IPv4 subnet with a network address and broadcast address:
-
-`usable hosts = 2^h - 2`
-
-Examples:
-
-| Prefix | Host bits | Total addresses | Traditional usable hosts |
-|---|---:|---:|---:|
-| `/24` | 8 | 256 | 254 |
-| `/25` | 7 | 128 | 126 |
-| `/26` | 6 | 64 | 62 |
-| `/27` | 5 | 32 | 30 |
-| `/28` | 4 | 16 | 14 |
-| `/29` | 3 | 8 | 6 |
-| `/30` | 2 | 4 | 2 |
-
-The formula is useful for planning but should not be applied blindly to `/31` and `/32`.
-
-A `/31` is commonly used for point-to-point IPv4 links and has two addresses available for the two endpoints.
-
-A `/32` identifies a single IPv4 address and is commonly used for host routes, loopback addresses, and other specific routing purposes.
-
-## IPv4 address classes
-
-Traditional IPv4 classful addressing used Classes A, B and C for fixed network and host boundaries.
-
-The historical structure included:
-
-- Class A
-- Class B
-- Class C
-- Class D for multicast
-- Class E for experimental or reserved purposes
-
-Classful addressing is no longer the normal basis for modern network design.
-
-CIDR allows arbitrary prefix lengths and therefore provides much more flexible address allocation.
-
-Understanding the historical classes remains useful because older documentation and educational material may still refer to them.
-
-## Private IPv4 addresses
-
-The traditional private IPv4 ranges are:
-
-- `10.0.0.0/8`
-- `172.16.0.0/12`
-- `192.168.0.0/16`
-
-These ranges are widely used for internal networks.
-
-Example:
-
-`192.168.1.20`
-
-could be the address of a laptop on a home or corporate LAN.
-
-Private addressing is not the same as security.
-
-A private address does not automatically mean:
-
-- encrypted communication
-- authenticated communication
-- authorization
-- malware protection
-- firewall protection
-- isolation from every other internal host
-
-Security must be implemented through appropriate network controls and application controls.
-
-## Public IPv4 addresses
-
-A public or globally routable IPv4 address is an address intended to be reachable through the global Internet routing system, subject to routing policy and security controls.
-
-An ordinary example used in documentation is often preferable to using a real organization's production address.
-
-The Python program uses standard library classification facilities where appropriate. The JavaScript and C++ implementations demonstrate explicit classification of important private and special-purpose ranges.
-
-The term "public IP" should not be interpreted as "every device using this address is directly accessible from the Internet." Firewalls, NAT, routing policy, cloud security groups, load balancers and other controls can affect reachability.
-
-## Special IPv4 addresses
-
-Several IPv4 ranges and values have special purposes.
+Port Address Translation is a common NAT technique that allows multiple internal connections to share a public IPv4 address by distinguishing flows with transport-layer ports.
 
 ### Loopback
 
-The loopback range is:
+An address used by a host to communicate with itself.
 
-`127.0.0.0/8`
+IPv4 loopback includes `127.0.0.0/8`, with `127.0.0.1` being the most familiar example.
 
-A common loopback address is:
-
-`127.0.0.1`
-
-Traffic directed to loopback remains within the local host.
+IPv6 loopback is `::1/128`.
 
 ### Link-local
 
-IPv4 link-local addresses use:
+An address intended for communication on the local link.
+
+IPv4 link-local space is `169.254.0.0/16`.
+
+IPv6 link-local addresses are in `fe80::/10`.
+
+### Multicast
+
+A mechanism for one-to-many communication.
+
+IPv4 multicast uses `224.0.0.0/4`.
+
+IPv6 multicast uses `ff00::/8`.
+
+### Dual stack
+
+A system that operates with IPv4 and IPv6 simultaneously.
+
+## CIDR notation
+
+CIDR represents an address and prefix length together.
+
+Examples include:
+
+`192.168.1.0/24`
+
+`10.0.0.0/8`
+
+`172.16.0.0/12`
+
+`2001:db8::/32`
+
+`2001:db8:1234::/48`
+
+The prefix length determines the network boundary.
+
+For IPv4:
+
+`/24` leaves 8 host bits.
+
+The total number of addresses is:
+
+`2^8 = 256`
+
+For a conventional IPv4 subnet, 254 addresses are normally considered usable host addresses because the network and broadcast addresses have special roles.
+
+A `/26` leaves six host bits:
+
+`2^6 = 64`
+
+addresses exist in the prefix, with 62 conventional usable host addresses.
+
+These conventional calculations should not be blindly applied to every IPv4 networking context. Point-to-point links, special-purpose prefixes, infrastructure systems, and operating-system behavior can have different operational rules.
+
+For IPv6:
+
+`/64` leaves 64 bits after the prefix.
+
+That means a `/64` contains:
+
+`2^64`
+
+addresses.
+
+The enormous IPv6 address space means that IPv6 subnet planning generally does not use the same address-conservation mindset that is common with IPv4.
+
+## Historical IPv4 address classes
+
+IPv4 originally used a classful addressing model.
+
+Historically:
+
+- Class A covered first-octet values 1 through 126.
+- Class B covered 128 through 191.
+- Class C covered 192 through 223.
+- Class D covered 224 through 239 and was used for multicast.
+- Class E covered 240 through 255 for experimental or reserved purposes.
+
+Classful addressing is historically important but is not the normal basis for modern network planning.
+
+Modern networks use CIDR. An address should therefore not be interpreted as a Class A, B, or C network simply because of its first octet.
+
+The Python implementation demonstrates the historical classes for educational purposes while using CIDR for actual subnet calculations.
+
+## IPv4 subnetting
+
+Subnetting divides a larger network into smaller networks.
+
+Suppose the starting network is:
+
+`192.168.10.0/24`
+
+Changing the prefix to `/26` allocates two additional bits to the network portion.
+
+The resulting networks are:
+
+`192.168.10.0/26`
+
+`192.168.10.64/26`
+
+`192.168.10.128/26`
+
+`192.168.10.192/26`
+
+Each contains 64 addresses.
+
+This is useful when different departments, services, security zones, or physical locations require separate networks.
+
+Subnetting can support:
+
+- address organization
+- routing hierarchy
+- broadcast-domain separation in IPv4
+- security policy boundaries
+- fault isolation
+- capacity planning
+- network administration
+
+Subnetting alone does not provide security. A subnet becomes a meaningful security boundary only when routing, filtering, authentication, or other controls enforce the intended policy.
+
+## Route aggregation
+
+Route aggregation combines compatible network prefixes into a larger summarized prefix.
+
+For example, four aligned networks:
+
+`192.168.0.0/24`
+
+`192.168.1.0/24`
+
+`192.168.2.0/24`
+
+`192.168.3.0/24`
+
+can be represented by:
+
+`192.168.0.0/22`
+
+when the networks are correctly aligned and contiguous.
+
+Aggregation reduces the number of routes that routers need to maintain and can make routing systems more scalable.
+
+Aggregation must preserve the required address boundaries. Arbitrary networks cannot always be represented accurately by one larger prefix without also covering addresses that were not part of the original collection.
+
+The Python and JavaScript implementations demonstrate route collapsing and aggregation concepts. The C++ implementation uses hierarchical routes and longest-prefix matching.
+
+## Longest-prefix matching
+
+When multiple routes match a destination, routers normally select the most specific matching prefix.
+
+Consider:
+
+`0.0.0.0/0`
+
+`10.0.0.0/8`
+
+`10.20.0.0/16`
+
+`10.20.30.0/24`
+
+For destination:
+
+`10.20.30.50`
+
+all four prefixes can match, but `/24` is the longest matching prefix.
+
+The conceptual process is:
+
+1. Examine the destination address.
+2. Identify routes whose prefixes contain the destination.
+3. Select the matching route with the longest prefix.
+4. Forward the packet according to that route.
+
+The C++ case study models this behavior through the `RoutingTable` class. The Python and JavaScript implementations also contain explicit longest-prefix lookup functions.
+
+A simple linear scan is easy to understand but is not the normal high-performance implementation for large production routing tables. Real systems use optimized data structures, specialized forwarding mechanisms, and sometimes hardware-assisted lookup.
+
+## Public and private IPv4 addressing
+
+The RFC 1918 private IPv4 ranges are:
+
+`10.0.0.0/8`
+
+`172.16.0.0/12`
+
+`192.168.0.0/16`
+
+These ranges are commonly used for internal networks.
+
+A typical home network might contain:
+
+`192.168.1.0/24`
+
+with a router such as:
+
+`192.168.1.1`
+
+and internal clients such as:
+
+`192.168.1.25`
+
+A private address can communicate within its private network and with other connected private networks when appropriate routing exists.
+
+A private address is not equivalent to a secret address. Other systems within the relevant network may be able to communicate with it.
+
+### Public IPv4 addresses
+
+Public IPv4 addresses can be used for Internet-facing services or other globally routed purposes.
+
+A public address does not necessarily mean that the host is reachable from every Internet location. Firewalls, ACLs, provider routing, service configuration, NAT, and other controls can prevent reachability.
+
+Similarly, a public address is not automatically malicious or unsafe.
+
+## NAT and PAT
+
+IPv4 address exhaustion contributed to the widespread use of Network Address Translation.
+
+A simplified outbound flow might look like:
+
+Private endpoint:
+
+`192.168.1.25:51500`
+
+Translated endpoint:
+
+`203.0.113.50:40001`
+
+Destination:
+
+`93.184.216.34:443`
+
+The NAT device maintains a mapping between the internal flow and the external representation.
+
+PAT is particularly common in consumer and enterprise networks because multiple private devices can share one public IPv4 address.
+
+NAT terminology includes:
+
+- SNAT, source address translation
+- DNAT, destination address translation
+- PAT, port address translation
+
+NAT is not the same as a firewall. NAT changes address information and can maintain state, while a firewall makes explicit traffic-control decisions according to security policy.
+
+## Important IPv4 special ranges
+
+Several IPv4 ranges have special purposes.
+
+### Loopback
+
+`127.0.0.0/8`
+
+The most familiar address is:
+
+`127.0.0.1`
+
+Traffic sent to loopback is intended for the local host and does not normally leave through the physical network.
+
+### Link-local
 
 `169.254.0.0/16`
 
-They can be used for local-link communication when normal address configuration is unavailable or unsuitable.
+IPv4 hosts can use link-local addressing when ordinary address configuration is unavailable in suitable circumstances.
+
+### Carrier-grade NAT space
+
+`100.64.0.0/10`
+
+This shared address space is commonly associated with Carrier-Grade NAT deployments.
+
+It should not be confused with RFC 1918 private space.
+
+### Documentation ranges
+
+`192.0.2.0/24`
+
+`198.51.100.0/24`
+
+`203.0.113.0/24`
+
+These ranges are intended for documentation and examples.
+
+The implementations use these ranges when an Internet-style example is required so that real infrastructure addresses are not accidentally presented as part of the design.
 
 ### Multicast
 
@@ -294,565 +438,963 @@ IPv4 multicast uses:
 
 `224.0.0.0/4`
 
-Multicast is different from unicast addressing because traffic can be delivered to multiple interested receivers.
+It supports one-to-many communication rather than ordinary unicast delivery.
 
-### Limited broadcast
+## IPv6 notation
 
-`255.255.255.255` is the IPv4 limited broadcast address.
-
-Broadcast has important differences from unicast and multicast and does not have a direct equivalent in IPv6.
-
-### Unspecified address
-
-`0.0.0.0` can represent an unspecified address in appropriate contexts.
-
-It is also associated with the IPv4 default route when written as:
-
-`0.0.0.0/0`
-
-The exact meaning depends on context.
-
-## VLSM
-
-VLSM stands for Variable Length Subnet Masking.
-
-VLSM allows different portions of an address space to be divided into different subnet sizes.
-
-Consider an organization with:
-
-- Engineering: 100 hosts
-- Security Operations: 50 hosts
-- Databases: 25 hosts
-- Management: 10 hosts
-- Router links: 2 hosts
-
-Giving every department the same `/24` network would waste a large amount of address space.
-
-VLSM allows the requirements to be matched to appropriate subnet sizes.
-
-A typical sizing process is:
-
-1. Determine the required number of usable addresses.
-2. Determine the number of host bits needed.
-3. Select the smallest suitable prefix.
-4. Align the subnet to its valid boundary.
-5. Allocate the subnet.
-6. Continue with the next requirement.
-
-The implementations sort requirements from largest to smallest before allocation. This reduces fragmentation in the simple sequential allocator used by the examples.
-
-Production IP address management requires additional considerations such as reserved ranges, VLAN design, routing summarization, DHCP, static allocations, overlapping requests, documentation, ownership, and change control.
-
-## Subnet membership
-
-An address belongs to a network when its network-prefix bits match the network prefix.
-
-For IPv4, the basic calculation is:
-
-`address AND mask`
-
-compared with:
-
-`network AND mask`
-
-For example, an address such as `192.168.10.25` belongs to `192.168.10.0/24`, while `192.168.11.25` does not.
-
-The Python implementation delegates the operation to the standard library.
-
-The JavaScript implementation calculates membership using 32-bit operations.
-
-The C++ implementation performs the operation directly on `std::uint32_t`.
-
-## Longest-prefix matching
-
-Routers can have multiple routes that match a destination.
+IPv6 addresses contain eight 16-bit hexadecimal groups in their fully expanded representation.
 
 For example:
 
-- `10.0.0.0/8`
-- `10.20.0.0/16`
-- `10.20.30.0/24`
-- `10.20.30.128/25`
+`2001:0db8:0000:0000:0000:ff00:0042:8329`
 
-A destination such as `10.20.30.200` belongs to all four networks.
+Leading zeroes in individual groups may be omitted:
 
-The routing decision uses the most specific matching prefix.
+`2001:db8:0:0:0:ff00:42:8329`
 
-The `/25` route is more specific than `/24`, which is more specific than `/16`, which is more specific than `/8`.
+A consecutive sequence of zero groups may be compressed:
 
-This is called longest-prefix matching.
+`2001:db8::ff00:42:8329`
 
-The C++ case study implements a route table and searches for the route with the greatest prefix length among the matching routes.
+The JavaScript and C++ implementations explicitly implement IPv6 parsing and compression to expose the underlying representation.
 
-The simple implementation has linear lookup behavior, approximately `O(N)` for `N` routes.
+The Python implementation uses the standard library, which handles IPv6 parsing and canonical representations.
 
-Real routing systems use highly optimized data structures and hardware-assisted mechanisms to handle large route tables efficiently.
-
-## NAT and private IPv4
-
-IPv4 networks frequently use private addresses internally and Network Address Translation at an edge.
-
-A simple architecture might contain:
-
-- Client: `192.168.1.20`
-- Database: `192.168.1.30`
-- Router LAN: `192.168.1.1`
-- Router WAN: public IPv4 address
-
-Port Address Translation, commonly called NAT overload, allows multiple internal connections to share an external IPv4 address while maintaining separate transport-layer flows.
-
-NAT and firewalling are separate concepts.
-
-NAT changes address or port information according to translation rules.
-
-A firewall enforces traffic policy.
-
-NAT should therefore not be treated as a replacement for authentication, authorization, encryption, or a properly designed firewall.
-
-## IPv4 limitations
-
-The fundamental limitation of IPv4 addressing is the size of its address space.
-
-There are only 32 address bits.
-
-The original Internet design has evolved through multiple mechanisms to extend the practical usefulness of IPv4, including:
-
-- subnetting
-- CIDR
-- address allocation policies
-- private addressing
-- NAT
-- DHCP
-- address reclamation
-- route aggregation
-
-These mechanisms improve operational efficiency but do not change the fundamental size of the IPv4 address space.
-
-## IPv6 representation
-
-IPv6 contains 128 bits.
-
-The expanded form contains eight 16-bit hexadecimal groups.
-
-Example:
-
-`2001:0db8:0000:0000:0000:0000:0000:0001`
-
-IPv6 supports zero compression.
-
-The same address can be represented as:
-
-`2001:db8::1`
-
-There are two important formatting rules.
-
-First, leading zeroes inside a hexadecimal group may be removed.
-
-For example:
-
-`0db8` becomes `db8`.
-
-Second, one consecutive sequence of zero groups can be replaced with `::`.
-
-For example:
-
-`2001:db8:0:0:0:0:0:1`
-
-becomes:
-
-`2001:db8::1`
-
-The `::` notation can occur only once because otherwise the number of omitted zero groups would be ambiguous.
-
-The C++ and JavaScript implementations explicitly parse and compress IPv6 addresses to demonstrate the underlying mechanics.
-
-## IPv6 address types
-
-Important IPv6 address categories include:
-
-| Range | Purpose |
-|---|---|
-| `2000::/3` | Global unicast range |
-| `fe80::/10` | Link-local unicast |
-| `fc00::/7` | Unique-local addressing |
-| `ff00::/8` | Multicast |
-| `::1/128` | Loopback |
-| `::/128` | Unspecified |
-
-IPv6 does not use traditional broadcast addressing.
-
-Multicast provides mechanisms for sending traffic to groups of receivers.
-
-### Link-local addresses
-
-Link-local addresses use:
-
-`fe80::/10`
-
-They are associated with communication on a local link and are important to IPv6 operation.
-
-A link-local address is not equivalent to a global Internet address.
-
-### Unique-local addresses
-
-Unique-local IPv6 addressing uses:
-
-`fc00::/7`
-
-These addresses are intended for private-style internal addressing.
-
-They should not be treated as a direct replacement for every IPv4 private-network design because IPv6 architecture and routing behavior differ.
-
-### Multicast
-
-IPv6 multicast uses:
-
-`ff00::/8`
-
-Multicast replaces several uses for which IPv4 networks historically relied on broadcast.
-
-### Loopback
-
-IPv6 loopback is:
-
-`::1`
-
-It serves a purpose analogous to IPv4 `127.0.0.1`.
+## IPv6 address categories
 
 ### Unspecified
 
-IPv6 unspecified address:
+`::/128`
 
-`::`
+The unspecified address represents the absence of a configured address in contexts where the protocol permits it.
 
-This represents the absence of a specified address in contexts where that semantic is defined.
+### Loopback
 
-## IPv6 prefix lengths
+`::1/128`
 
-IPv6 prefixes use the same general CIDR-style notation:
+IPv6 loopback is the counterpart to IPv4 loopback.
+
+### Link-local
+
+`fe80::/10`
+
+Link-local IPv6 addresses are intended for communication on the local link.
+
+They are important for IPv6 neighbor discovery and local-link operation.
+
+### Unique local addresses
+
+`fc00::/7`
+
+Unique local address space provides IPv6 addressing intended for local communication.
+
+It is conceptually useful to compare it with private IPv4 addressing, but the two mechanisms should not be treated as exact technical equivalents.
+
+### Multicast
+
+`ff00::/8`
+
+IPv6 uses multicast extensively.
+
+IPv6 does not use IPv4-style broadcast.
+
+Functions that require one-to-many delivery can use multicast instead.
+
+### Global unicast
+
+IPv6 global unicast addresses are generally associated with globally routable addressing.
+
+The commonly recognized global-unicast range begins within `2000::/3`, although address assignment and actual reachability depend on operational routing and allocation policies.
+
+## IPv6 subnetting
+
+An IPv6 organization might receive a `/48` prefix:
 
 `2001:db8:1234::/48`
 
-A common network design assigns `/64` prefixes to individual IPv6 subnets.
+It can then create `/64` LAN prefixes such as:
 
-A `/48` can be divided into:
+`2001:db8:1234:0001::/64`
 
-`2^(64 - 48) = 2^16 = 65,536`
+`2001:db8:1234:0002::/64`
 
-distinct `/64` subnets.
+`2001:db8:1234:0003::/64`
 
-This is one reason IPv6 subnet planning should not be approached as though IPv6 were simply a larger version of IPv4.
+A `/48` contains:
 
-The number of addresses inside an IPv6 `/64` is:
+`2^(64 - 48) = 65,536`
+
+different `/64` prefixes.
+
+A `/64` contains:
 
 `2^64`
 
-which is vastly larger than a conventional IPv4 subnet.
+individual addresses.
 
-The JavaScript implementation uses `BigInt` for IPv6 address-count calculations because JavaScript's ordinary `Number` type cannot represent every integer exactly at this magnitude.
+The large address space makes hierarchical allocation practical.
 
-## IPv6 interface addressing
+The C++ implementation demonstrates this design using `IPv6Address` objects and explicit prefix matching.
 
-A `/64` subnet contains 64 prefix bits and 64 remaining bits.
+## IPv6 configuration
 
-The remaining portion can be used by address-configuration mechanisms to form interface addresses.
+IPv6 supports multiple configuration mechanisms.
 
-IPv6 address formation can involve mechanisms such as:
+### Static configuration
 
-- manual configuration
-- DHCPv6
-- SLAAC
-- privacy-related interface addressing mechanisms
+An administrator explicitly configures an address and prefix.
 
-The exact mechanism depends on the network design and operating-system configuration.
+### SLAAC
 
-## Documentation addresses
+Stateless Address Autoconfiguration allows hosts to form addresses using information advertised by routers.
 
-The following IPv4 ranges are commonly used in technical documentation:
+Router Advertisements provide important network configuration information, including prefix information.
 
-- `192.0.2.0/24`
-- `198.51.100.0/24`
-- `203.0.113.0/24`
+### DHCPv6
 
-IPv6 documentation uses:
+DHCPv6 can provide address and configuration information.
 
-`2001:db8::/32`
+SLAAC and DHCPv6 are not necessarily mutually exclusive. IPv6 network behavior depends on the router-advertisement flags and the deployment design.
 
-These addresses are useful in examples because documentation should avoid accidentally exposing or implying dependence on real production addresses.
-
-The implementations use documentation addresses when demonstrating public-style address structures.
+The Python implementation demonstrates the basic mathematical concept of combining a prefix with an interface identifier.
 
 ## IPv4 versus IPv6
 
 | Property | IPv4 | IPv6 |
 |---|---|---|
 | Address size | 32 bits | 128 bits |
-| Common notation | Dotted decimal | Hexadecimal colon notation |
-| Address space | `2^32` | `2^128` |
-| Broadcast | Supported | No traditional broadcast |
+| Common notation | Dotted decimal | Colon-separated hexadecimal |
+| Example | `192.168.1.25` | `2001:db8::25` |
+| Broadcast | Supported | Not used |
 | Multicast | `224.0.0.0/4` | `ff00::/8` |
-| Loopback | `127.0.0.1` within `127.0.0.0/8` | `::1` |
+| Loopback | `127.0.0.0/8` | `::1/128` |
 | Link-local | `169.254.0.0/16` | `fe80::/10` |
-| Private-style addressing | RFC1918 ranges | Unique-local `fc00::/7` |
-| Common LAN prefix | Depends on design | `/64` is common |
-| NAT | Very widely deployed | Not an inherent requirement |
-| Address representation | 4 decimal octets | 8 hexadecimal groups |
+| Private/local addressing | RFC 1918 | ULA `fc00::/7` |
+| Common LAN prefix | `/24` is common in many IPv4 environments | `/64` is common in IPv6 LAN design |
+| NAT | Widely deployed | Not fundamental to IPv6 addressing |
 
-IPv6 should not be viewed simply as "IPv4 with more addresses."
+The differences are architectural rather than merely syntactic.
 
-The addressing architecture, special address behavior, multicast model, configuration mechanisms, neighbor discovery mechanisms, packet structure, and operational practices differ.
+IPv6 is not simply IPv4 with more address values. It also changes aspects of header design, multicast usage, fragmentation behavior, address configuration, neighbor discovery, and subnet planning.
 
-## Dual stack
+## IPv4 packet header concepts
 
-Dual stack means a host or network operates with IPv4 and IPv6 simultaneously.
+An IPv4 header contains fields including:
 
-For example, a server could have:
+- Version
+- IHL
+- DSCP and ECN
+- Total Length
+- Identification
+- Flags
+- Fragment Offset
+- TTL
+- Protocol
+- Header Checksum
+- Source Address
+- Destination Address
+- Options
 
-- IPv4: `192.168.10.20`
-- IPv6: `2001:db8:10:20::20`
+The source and destination fields contain the 32-bit IPv4 addresses.
 
-DNS can provide both:
+TTL, or Time To Live, limits the number of router hops through which a packet can pass before it is discarded.
 
-- an A record for IPv4
-- an AAAA record for IPv6
+The Protocol field identifies the next-layer protocol, such as TCP or UDP.
 
-A dual-stack deployment requires operational support for both protocols.
+IPv4 permits fragmentation under specified conditions. Modern network engineering generally aims to avoid unnecessary fragmentation through suitable MTU and packet-size management.
 
-This includes:
+The Python implementation demonstrates the 32-bit representation of an IPv4 address.
 
-- routing
-- firewalls
-- monitoring
-- logging
-- access controls
-- DNS
-- application configuration
-- troubleshooting
+## IPv6 packet header concepts
 
-A common operational mistake is to secure IPv4 while overlooking IPv6 connectivity.
+The IPv6 base header contains:
 
-## DNS and IP addressing
+- Version
+- Traffic Class
+- Flow Label
+- Payload Length
+- Next Header
+- Hop Limit
+- Source Address
+- Destination Address
 
-DNS is a naming system.
+IPv6 uses extension headers for optional functionality.
 
-IP addressing provides network-layer addressing.
+The `Next Header` field identifies either an extension header or an upper-layer protocol.
 
-For example:
+`Hop Limit` performs a role similar to IPv4 TTL.
 
-`application.example`
-
-could resolve to one or more IPv4 and IPv6 addresses.
-
-An A record represents an IPv4 address.
-
-An AAAA record represents an IPv6 address.
-
-DNS does not itself perform packet forwarding.
-
-A DNS name can map to multiple addresses, and multiple names can refer to the same address.
+A major difference concerns fragmentation. IPv6 routers do not fragment packets in transit. Fragmentation is handled by the sending endpoint when the protocol conditions require it.
 
 ## Python implementation
 
-The Python program is the broadest educational implementation.
+The Python program uses the standard-library `ipaddress` module.
 
-It uses the standard-library `ipaddress` module for robust parsing and address calculations.
+This module provides robust parsing and network calculations without requiring an external dependency.
 
-Important demonstrations include:
+The implementation demonstrates:
+
+- IPv4 parsing
+- IPv6 parsing
+- IPv4 integer representation
+- IPv6 integer representation
+- binary IPv4 representation
+- CIDR prefix handling
+- subnet generation
+- network and broadcast calculation
+- address classification
+- private address detection
+- special-purpose ranges
+- route aggregation
+- longest-prefix matching
+- network membership
+- address allocation
+- DNS resolution
+- dual-stack modeling
+- security considerations
+- capacity planning
+- error handling
+
+### Why the Python implementation uses `ipaddress`
+
+IP address syntax has many details that are easy to mishandle with ordinary string operations.
+
+For example, validating IPv4 by checking whether a string contains three periods is insufficient.
+
+The standard `ipaddress` implementation correctly handles numeric boundaries and IPv6 syntax.
+
+For educational demonstrations, explicit algorithms are also included where they clarify the concept.
+
+### Python address validation
+
+The function `validate_ip_address` attempts to parse an address and returns either an address object or `None`.
+
+The program tests valid and invalid examples, including malformed IPv4 and IPv6 strings.
+
+### Python network calculation
+
+The function `calculate_network_details` accepts an address and prefix and reports:
+
+- network
+- netmask
+- hostmask
+- prefix length
+- total addresses
+- first address
+- last address
+
+For conventional IPv4 networks it also demonstrates the traditional first and last usable host addresses.
+
+### Python address allocation
+
+The `IPv4Pool` class models a small address allocator.
+
+It demonstrates:
+
+- free address tracking
+- allocation
+- release
+- reuse
+- exhaustion handling
+- allocation state
+
+It is intentionally not a DHCP implementation. Real DHCP systems have leases, timers, client identifiers, conflict detection, persistence, authorization, and many additional protocol behaviors.
+
+## JavaScript implementation
+
+The JavaScript implementation takes a different approach.
+
+Node.js does not provide a built-in equivalent of Python's `ipaddress` module with the same API, so the program implements important calculations directly.
+
+This makes several internal mechanisms visible.
+
+### IPv4 parsing
+
+`parseIPv4`:
+
+- splits the address into four components
+- verifies numeric syntax
+- checks the 0 through 255 range
+- returns the four octets
+
+`ipv4ToInteger` converts the four octets into a 32-bit numeric representation.
+
+`integerToIPv4` performs the reverse operation.
+
+### IPv4 CIDR calculations
+
+The JavaScript file includes:
+
+- `ipv4MaskFromPrefix`
+- `ipv4NetworkAddress`
+- `ipv4BroadcastAddress`
+- `ipv4Contains`
+
+These functions show how the prefix length becomes a bit mask and how a network address can be calculated using a bitwise AND operation.
+
+### IPv6 arithmetic
+
+JavaScript's normal `Number` type cannot safely represent every integer in the 128-bit IPv6 space.
+
+The implementation therefore uses `BigInt`.
+
+`ipv6ToBigInt` converts an IPv6 address into a 128-bit integer.
+
+`bigIntToIPv6` converts it back into textual form.
+
+This is an important implementation distinction between IPv4 and IPv6.
+
+### IPv6 compression
+
+The `compressIPv6` function searches for the longest consecutive run of zero groups and replaces it with `::` when appropriate.
+
+This illustrates why IPv6 string formatting requires more than simply removing leading zeroes.
+
+### DNS
+
+The Node.js implementation uses the built-in `dns` module to perform a lookup for `example.com`.
+
+The result can contain IPv4 and IPv6 addresses.
+
+DNS and IP addressing solve different problems:
+
+- DNS maps names to resource records.
+- IP addresses are used by the network layer for packet delivery.
+
+A hostname should therefore not be treated as if it were itself an IP address.
+
+### Browser considerations
+
+JavaScript behaves differently in browsers and on servers.
+
+Node.js has operating-system networking APIs such as the `dns` module.
+
+Browser JavaScript operates under browser security and privacy boundaries. Web applications normally work with hostnames, URLs, and application-level network APIs rather than unrestricted access to local interface configuration.
+
+## C++ enterprise case study
+
+### Problem being modeled
+
+The C++ program models a simplified enterprise network.
+
+The organization has:
+
+- internal IPv4 networks
+- public-facing addressing examples
+- departmental subnets
+- a routing table
+- address allocation
+- access-control rules
+- IPv6 prefixes
+- dual-stack design requirements
+
+The goal is to demonstrate how IP addressing concepts become components of a larger networking system.
+
+### `IPv4Address`
+
+The `IPv4Address` class stores an address as a 32-bit unsigned integer.
+
+This provides efficient comparison and bitwise network calculations.
+
+It supports:
+
+- parsing dotted-decimal text
+- integer conversion
+- dotted-decimal output
+- binary output
+- comparison
+
+For example:
+
+`192.168.1.25`
+
+is stored as one 32-bit value.
+
+### `IPv4Network`
+
+The `IPv4Network` class represents a CIDR network.
+
+It calculates:
+
+- network address
+- prefix length
+- mask
+- broadcast address
+- total addresses
+- conventional usable addresses
+- network membership
+
+The network address is calculated conceptually as:
+
+`address AND subnet mask`
+
+The broadcast address is calculated using the inverse of the mask for the host bits.
+
+### `RoutingTable`
+
+The `RoutingTable` class contains a collection of `Route` objects.
+
+Each route contains:
+
+- a network
+- a next-hop address
+- an interface name
+
+The routing table implements longest-prefix matching.
+
+For example, if both `/8` and `/24` routes match a destination, the `/24` route is selected because it is more specific.
+
+The implementation uses a linear scan because that keeps the algorithm readable. A production routing implementation would require more specialized data structures and forwarding mechanisms.
+
+### `AddressAllocator`
+
+The `AddressAllocator` class models a basic IPv4 address pool.
+
+It maintains:
+
+- a network
+- free addresses
+- allocated addresses
+- device-to-address mappings
+
+It supports allocation and release.
+
+This demonstrates the relationship between subnet capacity and resource management.
+
+The class is intentionally simplified. A real DHCP service must handle lease expiration, persistent state, client identification, address conflicts, reservations, retransmission behavior, and protocol-specific message handling.
+
+### `AccessController`
+
+The `AccessController` demonstrates how address prefixes can participate in policy evaluation.
+
+Rules include:
+
+- source network
+- service
+- allow or deny decision
+- description
+
+The program intentionally uses longest-prefix matching so that a specific subnet can override a broader rule.
+
+For example, a broad internal rule may allow database access while a more-specific laboratory subnet rule denies it.
+
+This demonstrates an important principle:
+
+A more-specific policy can have precedence over a broad policy when the policy system is explicitly designed that way.
+
+Actual firewall behavior depends on the particular product, protocol, rule ordering, state model, and configuration.
+
+### IPv6 class
+
+The `IPv6Address` class stores eight 16-bit groups.
+
+It demonstrates:
+
+- IPv6 parsing
+- expanded representation
+- compressed representation
+- prefix matching
+- loopback detection
+- unspecified-address detection
+- link-local detection
+- unique-local detection
+- multicast detection
+
+The implementation does not attempt to reproduce every production IPv6 parser feature. In particular, the educational parser explicitly rejects IPv4-embedded IPv6 notation.
+
+## IPv6 compression algorithm
+
+The C++ implementation searches for the longest consecutive sequence of zero groups.
+
+For example:
+
+`2001:0db8:0000:0000:0000:0000:0000:0001`
+
+can be represented as:
+
+`2001:db8::1`
+
+A single zero group is normally not compressed because `::` is intended to replace a sequence of zero groups and should be used according to canonical IPv6 formatting rules.
+
+When more than one zero sequence has the same length, canonical formatting selects the appropriate first longest sequence.
+
+## Address validation
+
+Validation is important because malformed input can otherwise propagate into:
+
+- routing decisions
+- firewall rules
+- logs
+- configuration
+- database records
+- APIs
+- access-control systems
+
+The implementations reject examples such as:
+
+`192.168.1.999`
+
+`192.168.1`
+
+`192.168.one.1`
+
+`2001:db8:::1`
+
+and other malformed forms.
+
+Application code should use a standards-aware parser rather than a simple regular expression whenever correctness matters.
+
+Regular expressions can help with preliminary syntax checks, but IP parsing involves numerical bounds and IPv6-specific structure that a complete parser must handle.
+
+## Edge cases
+
+### `0.0.0.0`
+
+The meaning depends on context.
+
+It can represent an unspecified IPv4 address or be used as a wildcard address when a service binds to all local IPv4 interfaces.
+
+It should not automatically be treated as a normal host address.
+
+### `255.255.255.255`
+
+This is the IPv4 limited broadcast address.
+
+It has a special role and should not be treated as an ordinary unicast host address.
+
+### `::`
+
+This is the IPv6 unspecified address.
+
+### `::1`
+
+This is IPv6 loopback.
+
+### `127.0.0.1`
+
+This is the most familiar IPv4 loopback address.
+
+### `169.254.x.x`
+
+This belongs to IPv4 link-local space.
+
+### `fe80::`
+
+Addresses in the IPv6 link-local range require local-link scope and can have special interface-selection considerations in real operating systems.
+
+## Important distinctions
+
+### IP address versus MAC address
+
+An IP address operates at the network layer.
+
+A MAC address is associated with link-layer communication.
+
+They solve different problems and should not be treated as interchangeable identifiers.
+
+### Private versus public
+
+Private and public describe address-space and routing usage.
+
+They do not directly describe whether a system is trustworthy, secure, encrypted, or physically isolated.
+
+### NAT versus firewall
+
+NAT translates address information.
+
+A firewall enforces traffic policy.
+
+A device can perform both functions, but the functions remain conceptually distinct.
+
+### DNS versus IP
+
+DNS maps names to resource records.
+
+IP addresses are used by the IP layer.
+
+DNS is not a replacement for IP addressing.
+
+### IPv4 classes versus CIDR
+
+Class A, B, and C addressing is historical.
+
+CIDR is the modern method for representing IPv4 prefixes.
+
+### IPv4 broadcast versus IPv6 multicast
+
+IPv4 supports broadcast.
+
+IPv6 does not use broadcast. Multicast is used for many one-to-many communication requirements.
+
+### IPv4 fragmentation versus IPv6 fragmentation
+
+IPv4 allows routers to fragment packets under appropriate conditions.
+
+IPv6 routers do not fragment packets in transit. Fragmentation is handled by the sending endpoint.
+
+## Performance considerations
+
+Address arithmetic is normally inexpensive.
+
+The performance challenge appears when a system must search large numbers of prefixes repeatedly.
+
+A simple longest-prefix algorithm can scan every route:
+
+`O(R)`
+
+where `R` is the number of routes.
+
+That is adequate for educational code and small data sets.
+
+Production routing systems use specialized structures such as:
+
+- radix trees
+- Patricia tries
+- prefix tries
+- optimized routing tables
+- hardware forwarding tables
+
+These structures reduce the work required for repeated prefix lookup.
+
+Address allocation also has performance implications. A simple vector-based allocator may require linear removal or search operations. Production allocation systems use more sophisticated structures, persistent state, lease tracking, and conflict management.
+
+## Security considerations
+
+IP addresses should not be treated as identities by themselves.
+
+An internal private address does not prove that a request is trustworthy.
+
+A public address does not prove that a request is malicious.
+
+Important security considerations include:
+
+- validating address input
+- validating prefix lengths
+- separating IPv4 and IPv6 policy
+- checking dual-stack firewall behavior
+- avoiding stale IP allowlists
+- avoiding accidental exposure through IPv6
+- treating NAT separately from firewall enforcement
+- using appropriate logging
+- controlling management networks
+- avoiding real production addresses in documentation and test data
+- considering address changes when designing authentication and authorization
+
+### IPv6 security
+
+A security architecture that was created only for IPv4 may not automatically protect IPv6.
+
+Dual-stack deployments therefore require:
+
+- IPv4 firewall policy
+- IPv6 firewall policy
+- IPv4 routing validation
+- IPv6 routing validation
+- IPv4 monitoring
+- IPv6 monitoring
+- application testing on both families
+
+Disabling or ignoring IPv6 is not equivalent to securing it.
+
+## Implementation considerations
+
+### Python
+
+Python provides high-level standard-library support for IP addressing.
+
+This makes it appropriate for:
+
+- network planning scripts
+- configuration validation
+- automation
+- address inventory
+- testing
+- network analysis
+
+The `ipaddress` module reduces the risk of implementing parsing rules incorrectly.
+
+### JavaScript
+
+JavaScript is useful when address information is part of:
+
+- web applications
+- dashboards
+- configuration interfaces
+- network-management interfaces
+- server-side Node.js applications
+
+The JavaScript implementation demonstrates why `BigInt` is necessary when representing the full 128-bit IPv6 address space.
+
+### C++
+
+C++ is useful when networking software requires:
+
+- explicit memory representation
+- high performance
+- low-level control
+- custom packet-processing systems
+- routing infrastructure
+- embedded systems
+- network appliances
+
+The C++ case study uses integer representations and explicit bit operations to make the relationship between prefixes and addresses clear.
+
+## Common mistakes
+
+### Assuming every `192.168.x.x` address is the same network
+
+`192.168.1.1` and `192.168.2.1` belong to different `/24` networks, even though both are private addresses.
+
+The prefix determines the network boundary.
+
+### Assuming private means secure
+
+Private addressing is not a substitute for authentication, encryption, segmentation, or firewall controls.
+
+### Assuming public means reachable
+
+A public address can still be blocked by a firewall, routing policy, provider configuration, or service configuration.
+
+### Using classful assumptions
+
+Modern subnetting should be based on CIDR prefixes rather than historical A/B/C classes.
+
+### Treating IPv6 as merely a longer IPv4 string
+
+IPv6 introduces different notation, address categories, multicast behavior, configuration mechanisms, header behavior, and fragmentation rules.
+
+### Assuming `/24` always means 254 usable hosts
+
+That is the conventional calculation for an ordinary IPv4 `/24`, not a universal rule for every context.
+
+### Forgetting IPv6
+
+A system that supports IPv6 can have network paths that are different from its IPv4 paths.
+
+### Using ordinary numeric JavaScript values for all IPv6 arithmetic
+
+The JavaScript `Number` type cannot exactly represent every 128-bit integer. The implementation uses `BigInt` for IPv6 numerical operations.
+
+### Using simple string comparison for network membership
+
+IP addresses are numerical structures with prefix semantics. String comparison does not correctly implement CIDR membership.
+
+### Treating IP addresses as permanent identities
+
+Addresses can change, especially with dynamic allocation, mobility, provider changes, privacy mechanisms, and different network configurations.
+
+## Practical applications
+
+IP addressing knowledge is used in:
+
+- enterprise LAN design
+- data-center networks
+- cloud networking
+- Internet service providers
+- home networks
+- VPNs
+- firewalls
+- routers
+- load balancers
+- application servers
+- network monitoring
+- security engineering
+- infrastructure automation
+- DNS architecture
+- container networking
+- Kubernetes networking
+- service discovery
+- network access control
+- incident investigation
+- network capacity planning
+
+The same principles appear across these environments, although the specific implementation and management systems differ.
+
+## Example enterprise design
+
+A hypothetical organization can allocate:
+
+`10.50.0.0/16`
+
+for internal IPv4 addressing.
+
+The organization can then divide it into departmental networks.
+
+For example:
+
+- Engineering: a suitable subnet based on host capacity
+- Finance: a smaller subnet
+- Operations: a larger subnet
+- Research: a larger subnet
+
+A separate IPv6 allocation can use a documentation prefix for educational modeling:
+
+`2001:db8:1234::/48`
+
+The organization can then assign `/64` prefixes to individual LANs.
+
+A routing hierarchy can include:
+
+`0.0.0.0/0`
+
+for the default route,
+
+`10.0.0.0/8`
+
+for a broad internal range,
+
+`10.20.0.0/16`
+
+for a more-specific region,
+
+and:
+
+`10.20.30.0/24`
+
+for a specific server network.
+
+The longest-prefix rule determines which route applies to a destination.
+
+## Testing strategy
+
+The three implementations include testable operations such as:
+
+- valid IPv4 parsing
+- invalid IPv4 rejection
+- IPv4 integer conversion
+- network calculation
+- broadcast calculation
+- IPv4 network membership
+- IPv6 expansion
+- IPv6 compression
+- IPv6 prefix matching
+- loopback classification
+- link-local classification
+- private address classification
+- longest-prefix routing
+
+A robust production implementation should expand this with:
+
+- boundary-value tests
+- malformed-input tests
+- regression tests
+- randomized tests
+- property-based tests
+- interoperability tests
+- dual-stack tests
+- configuration validation tests
+- performance benchmarks
+
+## Design principles demonstrated by the case study
+
+### Represent addresses numerically when performing calculations
+
+IPv4 can naturally be represented by a 32-bit unsigned integer.
+
+IPv6 requires a 128-bit representation. The JavaScript implementation uses `BigInt`, while the C++ implementation represents IPv6 as eight 16-bit groups.
+
+### Separate parsing from policy
+
+Parsing answers whether an address is structurally valid.
+
+Classification determines what kind of address it is.
+
+Routing determines where traffic should go.
+
+Security policy determines whether traffic should be permitted.
+
+These are related but separate responsibilities.
+
+### Make prefix length explicit
+
+A raw address such as `192.168.1.25` does not completely describe its network membership.
+
+`192.168.1.25/24` supplies the network boundary.
+
+### Prefer hierarchical addressing
+
+Hierarchical prefixes allow organizations to divide networks according to departments, locations, services, or other architectural boundaries.
+
+This can also make route aggregation possible.
+
+### Design for both address families when required
+
+Applications, firewalls, monitoring systems, databases, APIs, and logging systems should not assume that all addresses are IPv4 if the environment supports IPv6.
+
+## Limitations of these implementations
+
+These programs are educational implementations rather than production routing stacks or DHCP servers.
+
+They intentionally omit many protocol and operating-system details.
+
+The Python implementation delegates parsing and classification to the standard library.
+
+The JavaScript implementation implements a useful subset of IPv4 and IPv6 functionality directly and explicitly leaves some advanced IPv6 textual forms outside its parser.
+
+The C++ implementation focuses on address representation, routing, allocation, policy evaluation, and IPv6 prefix handling rather than implementing complete IP, TCP, UDP, DHCP, ICMP, Neighbor Discovery, or routing protocols.
+
+A production networking system would require significantly more functionality, including protocol state machines, concurrency, packet I/O, timers, persistence, error recovery, operating-system integration, security controls, observability, and interoperability testing.
+
+## Files and their roles
+
+### Python file
+
+The Python program is the broadest educational reference.
+
+It uses `ipaddress` for accurate address operations and demonstrates concepts ranging from beginner-level representation to network planning, routing, address allocation, validation, security, and performance.
+
+### JavaScript file
+
+The JavaScript program emphasizes explicit implementation.
+
+It demonstrates how IPv4 masks, IPv4 integer conversion, IPv6 compression, IPv6 `BigInt` arithmetic, CIDR membership, routing lookup, DNS resolution, and dual-stack data structures can be implemented in a JavaScript environment.
+
+### C++ file
+
+The C++ program presents the subject as a technical enterprise case study.
+
+Its principal components are:
 
 - `IPv4Address`
 - `IPv4Network`
 - `IPv6Address`
-- `IPv6Network`
-- binary conversion
-- CIDR analysis
-- subnet sizing
-- VLSM-style allocation
-- network membership
-- address classification
-- longest-prefix routing
-- address-pool allocation
-- IPv6 compression and expansion
-- dual-stack architecture
-- automated assertions
+- `RoutingTable`
+- `AddressAllocator`
+- `AccessController`
 
-The Python implementation deliberately uses functions and dataclasses to make the individual networking operations easy to inspect.
+Together these classes model address storage, network boundaries, routing decisions, address assignment, and address-based policy evaluation.
 
-The `IPv4SubnetDetails` dataclass groups related results such as:
+## Complexity considerations
 
-- network address
-- subnet mask
-- broadcast address
-- first host
-- last host
-- total addresses
-- usable hosts
-- prefix length
+For an IPv4 address, parsing contains a fixed maximum of four octets, so its computational work is effectively constant with respect to the address length.
 
-This is useful because a subnet calculation produces a group of logically related values rather than one isolated number.
+IPv6 parsing contains a fixed maximum of eight 16-bit groups in the representation modeled by these programs, so it is also effectively constant-sized.
 
-## JavaScript implementation
+The simple longest-prefix routing algorithm scans every route, giving:
 
-The JavaScript implementation emphasizes how IP addressing can be implemented at the application level without an external package.
+`O(R)`
 
-IPv4 addresses are converted to unsigned 32-bit integers.
+lookup complexity for `R` routes.
 
-This makes operations such as:
+A production routing implementation can use prefix-specific data structures to reduce lookup work.
 
-`address AND mask`
+The educational address allocator can also use linear structures. Production allocators normally require more sophisticated management because address pools can contain very large numbers of addresses and must support leases, reservations, persistence, and concurrent clients.
 
-natural to implement.
+## Real-world relevance
 
-The implementation also demonstrates an important JavaScript distinction.
+IP addressing is one of the foundational concepts behind computer networking.
 
-Bitwise operators work on 32-bit integer representations, while `Number` itself is a floating-point type based on IEEE 754.
+Understanding the distinction between an address and a network prefix makes it possible to reason about:
 
-For IPv4 this can be managed with unsigned 32-bit conversion.
+- why two machines can communicate directly
+- why a router is required between different networks
+- how subnet boundaries are calculated
+- why private IPv4 addresses commonly appear inside organizations
+- how NAT permits shared public IPv4 addressing
+- why IPv6 does not require the same address-conservation techniques
+- how routers choose among overlapping prefixes
+- why IPv6 must be included in security policy
+- how network administrators plan address hierarchies
+- how software should validate and store IP addresses
 
-For IPv6, 128-bit values exceed the exact integer range of ordinary JavaScript numbers.
-
-The implementation therefore uses `BigInt` for IPv6 calculations.
-
-The JavaScript implementation also includes:
-
-- input validation
-- CIDR parsing
-- subnet calculation
-- IPv4 classification
-- VLSM allocation
-- longest-prefix matching
-- IPv6 parsing
-- IPv6 expansion
-- IPv6 compression
-- IPv6 prefix membership
-- IPv6 address-count calculations
-- an IPv4 address-pool class
-- automated tests
-
-This makes JavaScript particularly useful for demonstrating how network-addressing functionality can be embedded into browser-side or server-side applications.
-
-## C++ case study
-
-The C++ implementation models an organization designing an internal network.
-
-The fictional organization has an internal base network:
-
-`10.50.0.0/24`
-
-Its requirements include:
-
-- Engineering
-- Security Operations
-- Databases
-- Application Servers
-- Management
-- Router Links
-
-The program uses VLSM-style allocation to assign different subnet sizes according to the requested host counts.
-
-### IPv4Address class
-
-The `IPv4Address` class stores the address as a `std::uint32_t`.
-
-It provides:
-
-- parsing
-- string conversion
-- binary representation
-- access to the integer representation
-- equality comparison
-
-Using a fixed-width unsigned integer makes the relationship between IPv4 and its 32-bit representation explicit.
-
-### IPv4Network class
-
-The `IPv4Network` class stores:
-
-- prefix length
-- subnet mask
-- network address
-- broadcast address
-
-It provides methods for:
-
-- CIDR parsing
-- network calculation
-- broadcast calculation
-- subnet membership
-- host capacity
-- first-host calculation
-- last-host calculation
-
-The network address is calculated with a bitwise AND between the address and the subnet mask.
-
-### VLSMAllocator
-
-`VLSMAllocator` receives a base network and a set of requirements.
-
-Requirements are sorted by host count in descending order.
-
-Each requirement receives the smallest suitable subnet.
-
-The allocator also aligns each subnet to the correct block boundary.
-
-This is important because an arbitrary address cannot be treated as the start of a subnet for every prefix length.
-
-### Route table
-
-The case study creates routes such as:
-
-- `0.0.0.0/0`
-- `10.0.0.0/8`
-- `10.20.0.0/16`
-- `10.20.30.0/24`
-- `10.20.30.128/25`
-
-The program then determines which route should be selected for different destinations.
-
-The algorithm chooses the matching route with the largest prefix length.
-
-### IPv6Address class
-
-The C++ IPv6 implementation stores eight 16-bit groups.
-
-It supports:
-
-- compressed input
-- expanded input
-- validation
-- expanded output
-- compressed output
-- prefix membership
-
-The class demonstrates why IPv6 requires a larger representation than IPv4 and why address formatting requires careful handling of hexadecimal groups and zero compression.
-
-## Address allocation design
-
-A production IP address management system would generally require much more than the educational allocator.
-
-Typical requirements include:
-
-- persistent storage
-- authentication
-- authorization
-- address ownership
-- subnet ownership
-- reservations
-- DHCP integration
-- DNS integration
-- VLAN mapping
-- overlapping-address detection
-- IPv4 and IPv6 support
-- audit logging
-- change history
-- concurrency control
-- API access
-- role-based access control
-- backup and recovery
-- monitoring
-- reconciliation with network devices
-
-The C++ case study intentionally focuses on the core address-management mathematics and algorithms rather than implementing an entire enterprise IPAM platform.
-
-## Edge cases
-
-### `/31
+The Python, JavaScript, and C++ implementations expose the same underlying addressing principles at different abstraction levels: Python emphasizes reliable high-level network manipulation, JavaScript makes the algorithms visible in an application-oriented environment, and C++ models the mechanisms as components of a larger network system.
