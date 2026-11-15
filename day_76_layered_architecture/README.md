@@ -15,6 +15,7 @@ The architecture separates user interaction, workflow orchestration, business ru
 
 ### Architectural Structure
 
+```text
 +------------------------------------------------------+
 | PRESENTATION LAYER |
 | |
@@ -44,6 +45,7 @@ v
 | Database | File Storage | Repositories |
 | External Services | Logging | Messaging |
 +------------------------------------------------------+
+```
 
 The diagram describes logical responsibilities rather than a requirement that every dependency must point downward. In dependency-inverted designs, infrastructure implements interfaces defined by the application or domain-facing contracts.
 
