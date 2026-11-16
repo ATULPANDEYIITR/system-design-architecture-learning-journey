@@ -267,7 +267,6 @@ The composition root belongs near the application entry point and infrastructure
 
 The order-processing example has the following component relationships:
 
-```text
                  External Client
                        |
                        v
