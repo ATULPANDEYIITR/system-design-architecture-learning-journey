@@ -1,738 +1,870 @@
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <iomanip>
-#include <iostream>
-#include <map>
-#include <optional>
-#include <set>
-#include <sstream>
-#include <stdexcept>
-#include <string>
-#include <vector>
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
-using Clock = std::chrono::system_clock;
-using TimePoint = Clock::time_point;
-using Minutes = std::chrono::minutes;
+/*
+ * Disaster Recovery Governance Platform
+ *
+ * Java 17
+ * Standard library only.
+ *
+ * Enterprise-oriented domain model for backup management,
+ * recovery authorization, restoration, and RPO/RTO compliance.
+ */
 
-enum class BackupType {
-    FULL,
-    INCREMENTAL,
-    DIFFERENTIAL
-};
+public class DisasterRecovery {
 
-enum class BackupState {
-    CREATED,
-    VERIFIED,
-    FAILED,
-    RESTORED
-};
-
-enum class IncidentState {
-    OPEN,
-    RECOVERING,
-    RECOVERED,
-    FAILED
-};
-
-enum class Severity {
-    LOW,
-    MEDIUM,
-    HIGH,
-    CRITICAL
-};
-
-std::string toString(BackupType type) {
-    switch (type) {
-        case BackupType::FULL: return "FULL";
-        case BackupType::INCREMENTAL: return "INCREMENTAL";
-        case BackupType::DIFFERENTIAL: return "DIFFERENTIAL";
+    enum BackupType {
+        FULL,
+        INCREMENTAL,
+        DIFFERENTIAL
     }
 
-    throw std::logic_error("Unknown backup type");
-}
-
-std::string toString(BackupState state) {
-    switch (state) {
-        case BackupState::CREATED: return "CREATED";
-        case BackupState::VERIFIED: return "VERIFIED";
-        case BackupState::FAILED: return "FAILED";
-        case BackupState::RESTORED: return "RESTORED";
+    enum BackupStatus {
+        CREATED,
+        VERIFIED,
+        FAILED,
+        RESTORED
     }
 
-    throw std::logic_error("Unknown backup state");
-}
+    enum IncidentStatus {
+        OPEN,
+        RECOVERING,
+        RECOVERED,
+        FAILED
+    }
 
-struct RecoveryPolicy {
-    std::string name;
-    int rpoMinutes;
-    int rtoMinutes;
-    int retentionDays;
-    bool requireOffsite;
-    int minimumApprovals;
+    enum Severity {
+        LOW,
+        MEDIUM,
+        HIGH,
+        CRITICAL
+    }
 
-    void validate() const {
-        if (rpoMinutes < 0 || rtoMinutes <= 0 ||
-            retentionDays <= 0 || minimumApprovals < 1) {
-            throw std::invalid_argument(
-                "Invalid disaster recovery policy"
-            );
+    enum RecoveryAction {
+        RESTORE,
+        FAILOVER,
+        POINT_IN_TIME_RECOVERY
+    }
+
+    static class RecoveryException extends RuntimeException {
+        RecoveryException(String message) {
+            super(message);
         }
     }
-};
 
-struct Backup {
-    std::string id;
-    std::string system;
-    BackupType type;
-    TimePoint createdAt;
-    std::map<std::string, long long> data;
-    std::string digest;
-    BackupState state;
-    bool offsite;
-    std::optional<std::string> parentId;
-};
-
-struct Incident {
-    std::string id;
-    std::string system;
-    Severity severity;
-    TimePoint occurredAt;
-    IncidentState state;
-};
-
-struct RecoveryDecision {
-    bool eligible = false;
-    std::vector<std::string> violations;
-    std::optional<std::string> selectedBackup;
-    double actualRpoMinutes = 0;
-};
-
-struct RecoveryResult {
-    std::string incidentId;
-    std::string backupId;
-    double actualRpoMinutes;
-    double actualRtoMinutes;
-    bool rpoMet;
-    bool rtoMet;
-    bool successful;
-};
-
-struct ProtectedSystem {
-    std::string name;
-    std::map<std::string, long long> data;
-    RecoveryPolicy policy;
-    TimePoint modifiedAt;
-};
-
-class DisasterRecoveryEngine {
-private:
-    std::map<std::string, ProtectedSystem> systems;
-    std::map<std::string, Backup> backups;
-    std::map<std::string, Incident> incidents;
-    std::vector<RecoveryResult> results;
-
-    unsigned long long nextId = 1;
-
-    std::string generateId(const std::string& prefix) {
-        return prefix + "-" + std::to_string(nextId++);
-    }
-
-    ProtectedSystem& getSystem(const std::string& name) {
-        auto it = systems.find(name);
-
-        if (it == systems.end()) {
-            throw std::runtime_error("Protected system not found");
-        }
-
-        return it->second;
-    }
-
-    Backup& getBackup(const std::string& id) {
-        auto it = backups.find(id);
-
-        if (it == backups.end()) {
-            throw std::runtime_error("Backup not found");
-        }
-
-        return it->second;
-    }
-
-    Incident& getIncident(const std::string& id) {
-        auto it = incidents.find(id);
-
-        if (it == incidents.end()) {
-            throw std::runtime_error("Incident not found");
-        }
-
-        return it->second;
-    }
-
-    static std::string calculateDigest(
-        const std::map<std::string, long long>& data
+    record RecoveryPolicy(
+        String name,
+        long rpoMinutes,
+        long rtoMinutes,
+        int retentionDays,
+        boolean requireOffsite,
+        int minimumApprovals,
+        boolean requireIntegrityVerification
     ) {
-        /*
-         * Deterministic demonstration fingerprint.
-         * Production systems must use a cryptographic digest such as
-         * SHA-256 or an authenticated encryption construction.
-         */
-        unsigned long long hash = 14695981039346656037ULL;
+        RecoveryPolicy {
+            Objects.requireNonNull(name);
 
-        for (const auto& [key, value] : data) {
-            const std::string item =
-                key + "=" + std::to_string(value) + ";";
-
-            for (unsigned char character : item) {
-                hash ^= character;
-                hash *= 1099511628211ULL;
+            if (name.isBlank() ||
+                rpoMinutes < 0 ||
+                rtoMinutes <= 0 ||
+                retentionDays <= 0 ||
+                minimumApprovals < 1) {
+                throw new IllegalArgumentException(
+                    "Invalid recovery policy"
+                );
             }
         }
-
-        std::ostringstream output;
-        output << std::hex << hash;
-
-        return output.str();
     }
 
-    std::optional<std::reference_wrapper<Backup>>
-    latestVerifiedBackup(const std::string& systemName) {
-        Backup* selected = nullptr;
+    record RecoveryApproval(
+        String reviewer,
+        String role,
+        Instant approvedAt
+    ) {
+        RecoveryApproval {
+            Objects.requireNonNull(reviewer);
+            Objects.requireNonNull(role);
+            Objects.requireNonNull(approvedAt);
 
-        for (auto& [id, backup] : backups) {
-            if (
-                backup.system == systemName &&
-                backup.state == BackupState::VERIFIED
-            ) {
-                if (
-                    selected == nullptr ||
-                    backup.createdAt > selected->createdAt
-                ) {
-                    selected = &backup;
-                }
+            if (reviewer.isBlank() || role.isBlank()) {
+                throw new IllegalArgumentException(
+                    "Reviewer and role are required"
+                );
             }
         }
-
-        if (selected == nullptr) {
-            return std::nullopt;
-        }
-
-        return std::ref(*selected);
     }
 
-public:
-    void registerSystem(
-        const std::string& name,
-        const std::map<std::string, long long>& data,
-        const RecoveryPolicy& policy
-    ) {
-        policy.validate();
+    record RecoveryResult(
+        String incidentId,
+        String backupId,
+        Instant startedAt,
+        Instant completedAt,
+        double actualRpoMinutes,
+        double actualRtoMinutes,
+        boolean rpoMet,
+        boolean rtoMet,
+        boolean successful
+    ) {}
 
-        if (name.empty() || systems.count(name)) {
-            throw std::invalid_argument(
-                "Invalid or duplicate system"
-            );
+    static final class Backup {
+        private final String id;
+        private final String systemName;
+        private final BackupType type;
+        private final Instant createdAt;
+        private final Map<String, Long> snapshot;
+        private final String checksum;
+        private final boolean offsite;
+        private final String parentId;
+
+        private BackupStatus status;
+
+        Backup(
+            String systemName,
+            BackupType type,
+            Map<String, Long> snapshot,
+            String checksum,
+            boolean offsite,
+            String parentId
+        ) {
+            this.id = UUID.randomUUID().toString();
+            this.systemName = systemName;
+            this.type = type;
+            this.createdAt = Instant.now();
+            this.snapshot = Map.copyOf(snapshot);
+            this.checksum = checksum;
+            this.offsite = offsite;
+            this.parentId = parentId;
+            this.status = BackupStatus.CREATED;
         }
 
-        systems.emplace(
-            name,
-            ProtectedSystem{
-                name,
-                data,
-                policy,
-                Clock::now()
-            }
-        );
+        String id() {
+            return id;
+        }
+
+        String systemName() {
+            return systemName;
+        }
+
+        BackupType type() {
+            return type;
+        }
+
+        Instant createdAt() {
+            return createdAt;
+        }
+
+        Map<String, Long> snapshot() {
+            return snapshot;
+        }
+
+        String checksum() {
+            return checksum;
+        }
+
+        boolean offsite() {
+            return offsite;
+        }
+
+        String parentId() {
+            return parentId;
+        }
+
+        BackupStatus status() {
+            return status;
+        }
+
+        void setStatus(BackupStatus status) {
+            this.status = status;
+        }
     }
 
-    void updateSystem(
-        const std::string& name,
-        const std::map<std::string, long long>& changes
-    ) {
-        auto& system = getSystem(name);
+    static final class ProtectedSystem {
+        private final String name;
+        private final RecoveryPolicy policy;
+        private Map<String, Long> data;
+        private Instant modifiedAt;
 
-        for (const auto& [key, value] : changes) {
-            if (key.empty()) {
-                throw std::invalid_argument(
-                    "Data keys cannot be empty"
+        ProtectedSystem(
+            String name,
+            Map<String, Long> initialData,
+            RecoveryPolicy policy
+        ) {
+            this.name = name;
+            this.data = new HashMap<>(initialData);
+            this.policy = policy;
+            this.modifiedAt = Instant.now();
+        }
+
+        String name() {
+            return name;
+        }
+
+        RecoveryPolicy policy() {
+            return policy;
+        }
+
+        Map<String, Long> getData() {
+            return Map.copyOf(data);
+        }
+
+        void update(Map<String, Long> updates) {
+            data.putAll(updates);
+            modifiedAt = Instant.now();
+        }
+
+        void restore(Map<String, Long> snapshot, Instant timestamp) {
+            // Replace application state only after staging validation.
+            data = new HashMap<>(snapshot);
+            modifiedAt = timestamp;
+        }
+    }
+
+    static final class Incident {
+        private final String id;
+        private final String systemName;
+        private final Severity severity;
+        private final Instant occurredAt;
+        private final List<RecoveryApproval> approvals =
+            new ArrayList<>();
+
+        private IncidentStatus status = IncidentStatus.OPEN;
+
+        Incident(
+            String systemName,
+            Severity severity,
+            Instant occurredAt
+        ) {
+            this.id = UUID.randomUUID().toString();
+            this.systemName = systemName;
+            this.severity = severity;
+            this.occurredAt = occurredAt;
+        }
+
+        String id() {
+            return id;
+        }
+
+        String systemName() {
+            return systemName;
+        }
+
+        Instant occurredAt() {
+            return occurredAt;
+        }
+
+        IncidentStatus status() {
+            return status;
+        }
+
+        void setStatus(IncidentStatus status) {
+            this.status = status;
+        }
+
+        List<RecoveryApproval> approvals() {
+            return List.copyOf(approvals);
+        }
+
+        void addApproval(RecoveryApproval approval) {
+            if (status != IncidentStatus.OPEN) {
+                throw new RecoveryException(
+                    "Approvals cannot change after recovery begins"
                 );
             }
 
-            system.data[key] = value;
-        }
+            boolean duplicate = approvals.stream().anyMatch(
+                existing ->
+                    existing.reviewer().equalsIgnoreCase(
+                        approval.reviewer()
+                    )
+            );
 
-        system.modifiedAt = Clock::now();
+            if (duplicate) {
+                throw new RecoveryException(
+                    "Duplicate recovery approval"
+                );
+            }
+
+            approvals.add(approval);
+        }
     }
 
-    std::string createBackup(
-        const std::string& systemName,
-        BackupType type,
-        bool offsite = true
+    record EligibilityDecision(
+        boolean eligible,
+        Optional<String> backupId,
+        List<String> violations,
+        double actualRpoMinutes
     ) {
-        auto& system = getSystem(systemName);
+        EligibilityDecision {
+            backupId = backupId == null
+                ? Optional.empty()
+                : backupId;
 
-        if (system.policy.requireOffsite && !offsite) {
-            throw std::runtime_error(
-                "Offsite backup requirement violated"
-            );
+            violations = List.copyOf(violations);
+        }
+    }
+
+    static final class RecoveryAuthorizationService {
+
+        private static final Set<String> AUTHORIZED_ROLES = Set.of(
+            "OPERATIONS_MANAGER",
+            "SECURITY_MANAGER",
+            "DISASTER_RECOVERY_MANAGER"
+        );
+
+        void authorize(Incident incident, RecoveryPolicy policy) {
+            List<RecoveryApproval> approvals =
+                incident.approvals();
+
+            Set<String> reviewers = approvals.stream()
+                .map(approval ->
+                    approval.reviewer().toLowerCase()
+                )
+                .collect(Collectors.toSet());
+
+            Set<String> authorizedReviewers = approvals.stream()
+                .filter(approval ->
+                    AUTHORIZED_ROLES.contains(approval.role())
+                )
+                .map(approval ->
+                    approval.reviewer().toLowerCase()
+                )
+                .collect(Collectors.toSet());
+
+            if (reviewers.size() < policy.minimumApprovals()) {
+                throw new RecoveryException(
+                    "Minimum approval count not satisfied"
+                );
+            }
+
+            if (
+                authorizedReviewers.size() <
+                policy.minimumApprovals()
+            ) {
+                throw new RecoveryException(
+                    "Approvals from authorized roles are insufficient"
+                );
+            }
+        }
+    }
+
+    static final class BackupService {
+
+        private final Map<String, Backup> backups = new HashMap<>();
+
+        private String checksum(Map<String, Long> snapshot) {
+            /*
+             * SHA-256 over a deterministic representation.
+             * Production implementations should use a versioned,
+             * canonical serialization format.
+             */
+            try {
+                var digest = java.security.MessageDigest.getInstance(
+                    "SHA-256"
+                );
+
+                String canonical = snapshot.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(entry ->
+                        entry.getKey() + "=" + entry.getValue()
+                    )
+                    .collect(Collectors.joining(";"));
+
+                byte[] hash = digest.digest(
+                    canonical.getBytes(
+                        java.nio.charset.StandardCharsets.UTF_8
+                    )
+                );
+
+                return java.util.HexFormat.of().formatHex(hash);
+
+            } catch (java.security.NoSuchAlgorithmException error) {
+                throw new IllegalStateException(error);
+            }
         }
 
-        std::optional<std::string> parent;
+        Backup create(
+            ProtectedSystem system,
+            BackupType type,
+            boolean offsite
+        ) {
+            if (
+                system.policy().requireOffsite() &&
+                !offsite
+            ) {
+                throw new RecoveryException(
+                    "Offsite backup is mandatory"
+                );
+            }
 
-        if (type == BackupType::INCREMENTAL) {
-            auto latest = latestVerifiedBackup(systemName);
+            Optional<Backup> parent = backups.values().stream()
+                .filter(backup ->
+                    backup.systemName().equals(system.name()) &&
+                    backup.status() == BackupStatus.VERIFIED
+                )
+                .max(Comparator.comparing(Backup::createdAt));
 
-            if (!latest.has_value()) {
-                throw std::runtime_error(
+            if (
+                type == BackupType.INCREMENTAL &&
+                parent.isEmpty()
+            ) {
+                throw new RecoveryException(
                     "Incremental backup requires a verified parent"
                 );
             }
 
-            parent = latest->get().id;
+            Map<String, Long> snapshot = system.getData();
+
+            Backup backup = new Backup(
+                system.name(),
+                type,
+                snapshot,
+                checksum(snapshot),
+                offsite,
+                type == BackupType.INCREMENTAL
+                    ? parent.get().id()
+                    : null
+            );
+
+            backups.put(backup.id(), backup);
+
+            verify(backup.id());
+
+            return backup;
         }
 
-        Backup backup;
+        void verify(String backupId) {
+            Backup backup = requireBackup(backupId);
 
-        backup.id = generateId("BKP");
-        backup.system = systemName;
-        backup.type = type;
-        backup.createdAt = Clock::now();
-        backup.data = system.data;
-        backup.digest = calculateDigest(backup.data);
-        backup.state = BackupState::CREATED;
-        backup.offsite = offsite;
-        backup.parentId = parent;
+            if (!checksum(backup.snapshot()).equals(
+                backup.checksum()
+            )) {
+                backup.setStatus(BackupStatus.FAILED);
 
-        const std::string id = backup.id;
+                throw new RecoveryException(
+                    "Backup integrity verification failed"
+                );
+            }
 
-        backups.emplace(id, std::move(backup));
+            backup.setStatus(BackupStatus.VERIFIED);
+        }
 
-        verifyBackup(id);
+        Backup requireBackup(String id) {
+            Backup backup = backups.get(id);
 
-        return id;
+            if (backup == null) {
+                throw new RecoveryException(
+                    "Backup does not exist"
+                );
+            }
+
+            return backup;
+        }
+
+        List<Backup> listForSystem(String systemName) {
+            return backups.values().stream()
+                .filter(backup ->
+                    backup.systemName().equals(systemName)
+                )
+                .sorted(
+                    Comparator.comparing(Backup::createdAt)
+                )
+                .toList();
+        }
     }
 
-    bool verifyBackup(const std::string& id) {
-        auto& backup = getBackup(id);
+    static final class RecoveryEligibilityService {
 
-        if (backup.digest != calculateDigest(backup.data)) {
-            backup.state = BackupState::FAILED;
+        EligibilityDecision evaluate(
+            Incident incident,
+            ProtectedSystem system,
+            List<Backup> availableBackups,
+            String requestedBackup
+        ) {
+            List<String> violations = new ArrayList<>();
 
-            throw std::runtime_error(
-                "Backup integrity verification failed"
+            if (incident.status() != IncidentStatus.OPEN) {
+                violations.add("Incident is not open");
+            }
+
+            Optional<Backup> selected = availableBackups.stream()
+                .filter(backup ->
+                    requestedBackup == null ||
+                    backup.id().equals(requestedBackup)
+                )
+                .filter(backup ->
+                    backup.status() == BackupStatus.VERIFIED
+                )
+                .filter(backup ->
+                    backup.createdAt().compareTo(
+                        incident.occurredAt()
+                    ) <= 0
+                )
+                .filter(backup ->
+                    !system.policy().requireOffsite() ||
+                    backup.offsite()
+                )
+                .max(Comparator.comparing(Backup::createdAt));
+
+            if (selected.isEmpty()) {
+                violations.add("No eligible backup exists");
+
+                return new EligibilityDecision(
+                    false,
+                    Optional.empty(),
+                    violations,
+                    Double.NaN
+                );
+            }
+
+            double actualRpo = Duration.between(
+                selected.get().createdAt(),
+                incident.occurredAt()
+            ).toMillis() / 60000.0;
+
+            if (actualRpo > system.policy().rpoMinutes()) {
+                violations.add("RPO requirement cannot be satisfied");
+            }
+
+            return new EligibilityDecision(
+                violations.isEmpty(),
+                Optional.of(selected.get().id()),
+                violations,
+                actualRpo
             );
         }
-
-        backup.state = BackupState::VERIFIED;
-
-        return true;
     }
 
-    std::string createIncident(
-        const std::string& systemName,
-        Severity severity,
-        TimePoint occurredAt
-    ) {
-        getSystem(systemName);
+    static final class RecoveryService {
 
-        const std::string id = generateId("INC");
+        private final BackupService backupService;
+        private final RecoveryAuthorizationService authorization;
+        private final RecoveryEligibilityService eligibility;
 
-        incidents.emplace(
-            id,
-            Incident{
-                id,
+        private final Map<String, ProtectedSystem> systems =
+            new HashMap<>();
+
+        private final Map<String, Incident> incidents =
+            new HashMap<>();
+
+        private final List<RecoveryResult> results =
+            new ArrayList<>();
+
+        RecoveryService(
+            BackupService backupService,
+            RecoveryAuthorizationService authorization,
+            RecoveryEligibilityService eligibility
+        ) {
+            this.backupService = backupService;
+            this.authorization = authorization;
+            this.eligibility = eligibility;
+        }
+
+        void register(ProtectedSystem system) {
+            if (systems.putIfAbsent(system.name(), system) != null) {
+                throw new RecoveryException(
+                    "Duplicate protected system"
+                );
+            }
+        }
+
+        Incident reportIncident(
+            String systemName,
+            Severity severity,
+            Instant occurredAt
+        ) {
+            if (!systems.containsKey(systemName)) {
+                throw new RecoveryException(
+                    "Unknown protected system"
+                );
+            }
+
+            Incident incident = new Incident(
                 systemName,
                 severity,
-                occurredAt,
-                IncidentState::OPEN
-            }
-        );
-
-        return id;
-    }
-
-    RecoveryDecision evaluateEligibility(
-        const std::string& incidentId,
-        int approvals,
-        const std::optional<std::string>& requestedBackup =
-            std::nullopt
-    ) {
-        const auto& incident = getIncident(incidentId);
-        const auto& system = getSystem(incident.system);
-
-        RecoveryDecision decision;
-
-        if (incident.state != IncidentState::OPEN) {
-            decision.violations.push_back(
-                "Incident is not open"
-            );
-        }
-
-        if (approvals < system.policy.minimumApprovals) {
-            decision.violations.push_back(
-                "Insufficient independent recovery approvals"
-            );
-        }
-
-        const Backup* selected = nullptr;
-
-        for (const auto& [id, backup] : backups) {
-            if (backup.system != incident.system) {
-                continue;
-            }
-
-            if (
-                requestedBackup.has_value() &&
-                id != requestedBackup.value()
-            ) {
-                continue;
-            }
-
-            if (backup.state != BackupState::VERIFIED) {
-                continue;
-            }
-
-            if (backup.createdAt > incident.occurredAt) {
-                continue;
-            }
-
-            if (
-                system.policy.requireOffsite &&
-                !backup.offsite
-            ) {
-                continue;
-            }
-
-            if (
-                selected == nullptr ||
-                backup.createdAt > selected->createdAt
-            ) {
-                selected = &backup;
-            }
-        }
-
-        if (selected == nullptr) {
-            decision.violations.push_back(
-                "No eligible verified backup exists"
-            );
-        } else {
-            decision.selectedBackup = selected->id;
-
-            decision.actualRpoMinutes =
-                std::chrono::duration<double, std::ratio<60>>(
-                    incident.occurredAt - selected->createdAt
-                ).count();
-
-            if (
-                decision.actualRpoMinutes >
-                system.policy.rpoMinutes
-            ) {
-                decision.violations.push_back(
-                    "RPO target cannot be met by selected backup"
-                );
-            }
-        }
-
-        decision.eligible = decision.violations.empty();
-
-        return decision;
-    }
-
-    RecoveryResult restore(
-        const std::string& incidentId,
-        int approvals,
-        const std::optional<std::string>& requestedBackup =
-            std::nullopt
-    ) {
-        auto& incident = getIncident(incidentId);
-        auto& system = getSystem(incident.system);
-
-        const auto decision = evaluateEligibility(
-            incidentId,
-            approvals,
-            requestedBackup
-        );
-
-        if (!decision.eligible) {
-            std::ostringstream message;
-
-            for (const auto& violation : decision.violations) {
-                message << violation << "; ";
-            }
-
-            throw std::runtime_error(message.str());
-        }
-
-        incident.state = IncidentState::RECOVERING;
-
-        const auto started = Clock::now();
-
-        try {
-            auto& backup = getBackup(
-                decision.selectedBackup.value()
+                occurredAt
             );
 
-            verifyBackup(backup.id);
+            incidents.put(incident.id(), incident);
 
-            // Stage the complete snapshot before replacing active data.
-            auto stagedData = backup.data;
+            return incident;
+        }
 
-            if (stagedData.empty()) {
-                throw std::runtime_error(
-                    "Restored snapshot cannot be empty"
+        RecoveryResult recover(
+            String incidentId,
+            String backupId
+        ) {
+            Incident incident = incidents.get(incidentId);
+
+            if (incident == null) {
+                throw new RecoveryException(
+                    "Incident not found"
                 );
             }
 
-            system.data.swap(stagedData);
-            system.modifiedAt = backup.createdAt;
+            ProtectedSystem system =
+                systems.get(incident.systemName());
 
-            backup.state = BackupState::RESTORED;
-            incident.state = IncidentState::RECOVERED;
-
-            const auto completed = Clock::now();
-
-            const double actualRto =
-                std::chrono::duration<double, std::ratio<60>>(
-                    completed - started
-                ).count();
-
-            RecoveryResult result{
-                incidentId,
-                backup.id,
-                decision.actualRpoMinutes,
-                actualRto,
-                decision.actualRpoMinutes <=
-                    system.policy.rpoMinutes,
-                actualRto <= system.policy.rtoMinutes,
-                true
-            };
-
-            results.push_back(result);
-
-            return result;
-
-        } catch (...) {
-            incident.state = IncidentState::FAILED;
-            throw;
-        }
-    }
-
-    void displaySystem(const std::string& name) {
-        const auto& system = getSystem(name);
-
-        std::cout << "\nSystem: " << system.name << "\n";
-
-        for (const auto& [key, value] : system.data) {
-            std::cout << "  " << key << ": " << value << "\n";
-        }
-    }
-
-    void displayMetrics() const {
-        if (results.empty()) {
-            std::cout << "\nNo recovery results available.\n";
-            return;
-        }
-
-        int rpoPassed = 0;
-        int rtoPassed = 0;
-
-        for (const auto& result : results) {
-            rpoPassed += result.rpoMet;
-            rtoPassed += result.rtoMet;
-        }
-
-        const double count = results.size();
-
-        std::cout << std::fixed << std::setprecision(2);
-
-        std::cout
-            << "\nRecovery Metrics\n"
-            << "Total recoveries: " << results.size() << "\n"
-            << "RPO compliance: "
-            << (100.0 * rpoPassed / count) << "%\n"
-            << "RTO compliance: "
-            << (100.0 * rtoPassed / count) << "%\n";
-    }
-
-    void listBackups(const std::string& systemName) const {
-        std::cout << "\nBackup Inventory\n";
-
-        for (const auto& [id, backup] : backups) {
-            if (backup.system == systemName) {
-                std::cout
-                    << id << " | "
-                    << toString(backup.type) << " | "
-                    << toString(backup.state) << " | "
-                    << (backup.offsite ? "OFFSITE" : "LOCAL")
-                    << "\n";
-            }
-        }
-    }
-
-    void enforceRetention(
-        const std::string& systemName,
-        TimePoint reference
-    ) {
-        const auto& system = getSystem(systemName);
-
-        const auto cutoff = reference -
-            std::chrono::hours(
-                24 * system.policy.retentionDays
+            authorization.authorize(
+                incident,
+                system.policy()
             );
 
-        std::set<std::string> referencedParents;
+            EligibilityDecision decision =
+                eligibility.evaluate(
+                    incident,
+                    system,
+                    backupService.listForSystem(system.name()),
+                    backupId
+                );
 
-        for (const auto& [id, backup] : backups) {
-            if (backup.parentId.has_value()) {
-                referencedParents.insert(
-                    backup.parentId.value()
+            if (!decision.eligible()) {
+                throw new RecoveryException(
+                    String.join("; ", decision.violations())
                 );
             }
-        }
 
-        for (auto it = backups.begin(); it != backups.end();) {
-            const auto& backup = it->second;
+            incident.setStatus(IncidentStatus.RECOVERING);
 
-            if (
-                backup.system == systemName &&
-                backup.createdAt < cutoff &&
-                !referencedParents.count(backup.id)
-            ) {
-                it = backups.erase(it);
-            } else {
-                ++it;
+            Instant started = Instant.now();
+
+            try {
+                Backup backup = backupService.requireBackup(
+                    decision.backupId().orElseThrow()
+                );
+
+                backupService.verify(backup.id());
+
+                // Prepare replacement state before committing restoration.
+                Map<String, Long> staged = Map.copyOf(
+                    backup.snapshot()
+                );
+
+                if (staged.isEmpty()) {
+                    throw new RecoveryException(
+                        "Empty snapshot rejected"
+                    );
+                }
+
+                system.restore(staged, backup.createdAt());
+
+                backup.setStatus(BackupStatus.RESTORED);
+                incident.setStatus(IncidentStatus.RECOVERED);
+
+                Instant completed = Instant.now();
+
+                double actualRto = Duration.between(
+                    started,
+                    completed
+                ).toMillis() / 60000.0;
+
+                RecoveryResult result = new RecoveryResult(
+                    incident.id(),
+                    backup.id(),
+                    started,
+                    completed,
+                    decision.actualRpoMinutes(),
+                    actualRto,
+                    decision.actualRpoMinutes() <=
+                        system.policy().rpoMinutes(),
+                    actualRto <= system.policy().rtoMinutes(),
+                    true
+                );
+
+                results.add(result);
+
+                return result;
+
+            } catch (RuntimeException error) {
+                incident.setStatus(IncidentStatus.FAILED);
+                throw error;
             }
         }
+
+        List<RecoveryResult> results() {
+            return List.copyOf(results);
+        }
+
+        Map<String, Double> metrics() {
+            if (results.isEmpty()) {
+                return Map.of(
+                    "rpoCompliancePercent", 0.0,
+                    "rtoCompliancePercent", 0.0
+                );
+            }
+
+            long rpoPassed = results.stream()
+                .filter(RecoveryResult::rpoMet)
+                .count();
+
+            long rtoPassed = results.stream()
+                .filter(RecoveryResult::rtoMet)
+                .count();
+
+            double count = results.size();
+
+            return Map.of(
+                "rpoCompliancePercent",
+                100.0 * rpoPassed / count,
+                "rtoCompliancePercent",
+                100.0 * rtoPassed / count
+            );
+        }
+
+        ProtectedSystem getSystem(String name) {
+            ProtectedSystem system = systems.get(name);
+
+            if (system == null) {
+                throw new RecoveryException(
+                    "Protected system not found"
+                );
+            }
+
+            return system;
+        }
     }
-};
 
+    public static void main(String[] args) {
 
-int main() {
-    try {
-        DisasterRecoveryEngine engine;
-
-        RecoveryPolicy policy{
-            "Banking Critical Infrastructure",
+        RecoveryPolicy policy = new RecoveryPolicy(
+            "Enterprise Banking Recovery",
             15,
             30,
             30,
             true,
-            2
-        };
+            2,
+            true
+        );
 
-        engine.registerSystem(
-            "banking-primary",
-            {
-                {"accounts", 25000},
-                {"transactions", 150000},
-                {"balance_inr", 750000000}
-            },
+        ProtectedSystem banking = new ProtectedSystem(
+            "banking-production",
+            Map.of(
+                "accounts", 25000L,
+                "transactions", 150000L,
+                "balanceInr", 750000000L
+            ),
             policy
         );
 
-        const std::string fullBackup =
-            engine.createBackup(
-                "banking-primary",
-                BackupType::FULL,
-                true
-            );
+        BackupService backupService = new BackupService();
 
-        engine.updateSystem(
-            "banking-primary",
-            {
-                {"transactions", 150100},
-                {"balance_inr", 752000000}
-            }
+        RecoveryAuthorizationService authorization =
+            new RecoveryAuthorizationService();
+
+        RecoveryEligibilityService eligibility =
+            new RecoveryEligibilityService();
+
+        RecoveryService recoveryService = new RecoveryService(
+            backupService,
+            authorization,
+            eligibility
         );
 
-        const std::string incrementalBackup =
-            engine.createBackup(
-                "banking-primary",
-                BackupType::INCREMENTAL,
-                true
-            );
+        recoveryService.register(banking);
 
-        const TimePoint incidentTime = Clock::now();
-
-        const std::string incident =
-            engine.createIncident(
-                "banking-primary",
-                Severity::CRITICAL,
-                incidentTime
-            );
-
-        engine.updateSystem(
-            "banking-primary",
-            {
-                {"accounts", 0},
-                {"transactions", 0},
-                {"balance_inr", 0}
-            }
+        Backup fullBackup = backupService.create(
+            banking,
+            BackupType.FULL,
+            true
         );
 
-        std::cout << "Disaster Recovery Simulation\n";
-        std::cout << "============================\n";
+        banking.update(Map.of(
+            "transactions", 150100L,
+            "balanceInr", 752000000L
+        ));
 
-        engine.listBackups("banking-primary");
-
-        auto decision = engine.evaluateEligibility(
-            incident,
-            2,
-            incrementalBackup
+        Backup incremental = backupService.create(
+            banking,
+            BackupType.INCREMENTAL,
+            true
         );
 
-        if (!decision.eligible) {
-            std::cout << "\nRecovery blocked:\n";
+        Instant incidentTime = Instant.now();
 
-            for (const auto& violation : decision.violations) {
-                std::cout << "- " << violation << "\n";
-            }
-
-            return 1;
-        }
-
-        std::cout
-            << "\nSelected backup: "
-            << decision.selectedBackup.value()
-            << "\n";
-
-        const RecoveryResult result = engine.restore(
-            incident,
-            2,
-            incrementalBackup
+        Incident incident = recoveryService.reportIncident(
+            "banking-production",
+            Severity.CRITICAL,
+            incidentTime
         );
 
-        engine.displaySystem("banking-primary");
-        engine.displayMetrics();
+        incident.addApproval(
+            new RecoveryApproval(
+                "operations-lead",
+                "OPERATIONS_MANAGER",
+                Instant.now()
+            )
+        );
 
-        std::cout << std::fixed << std::setprecision(4);
+        incident.addApproval(
+            new RecoveryApproval(
+                "security-lead",
+                "SECURITY_MANAGER",
+                Instant.now()
+            )
+        );
 
-        std::cout
-            << "\nRecovery Assessment\n"
-            << "Actual RPO: "
-            << result.actualRpoMinutes << " minutes\n"
-            << "Actual RTO: "
-            << result.actualRtoMinutes << " minutes\n"
-            << "RPO met: "
-            << (result.rpoMet ? "YES" : "NO") << "\n"
-            << "RTO met: "
-            << (result.rtoMet ? "YES" : "NO") << "\n"
-            << "Recovery successful: "
-            << (result.successful ? "YES" : "NO") << "\n";
+        // Simulate complete production data loss.
+        banking.update(Map.of(
+            "accounts", 0L,
+            "transactions", 0L,
+            "balanceInr", 0L
+        ));
 
-        // A backup may restore successfully without meeting its RPO.
-        // Eligibility and successful data restoration are separate
-        // decisions in operational recovery systems.
+        RecoveryResult result = recoveryService.recover(
+            incident.id(),
+            incremental.id()
+        );
 
-        (void)fullBackup;
+        System.out.println("DISASTER RECOVERY REPORT");
+        System.out.println("=========================");
 
-    } catch (const std::exception& error) {
-        std::cerr
-            << "Recovery engine error: "
-            << error.what()
-            << "\n";
+        System.out.println(
+            "Incident: " + result.incidentId()
+        );
 
-        return 1;
+        System.out.println(
+            "Selected backup: " + result.backupId()
+        );
+
+        System.out.println(
+            "RPO: " + result.actualRpoMinutes() + " minutes"
+        );
+
+        System.out.println(
+            "RTO: " + result.actualRtoMinutes() + " minutes"
+        );
+
+        System.out.println(
+            "RPO met: " + result.rpoMet()
+        );
+
+        System.out.println(
+            "RTO met: " + result.rtoMet()
+        );
+
+        System.out.println(
+            "Restored data: " +
+            recoveryService.getSystem(
+                "banking-production"
+            ).getData()
+        );
+
+        System.out.println(
+            "Compliance: " + recoveryService.metrics()
+        );
+
+        System.out.println(
+            "Previous full backup: " + fullBackup.id()
+        );
     }
-
-    return 0;
 }
